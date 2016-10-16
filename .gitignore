@@ -1,0 +1,6 @@
+build/
+dist/
+.ipynb_checkpoints/
+OandaPython.egg-info
+*/__pycache__/
+sample/config.json
