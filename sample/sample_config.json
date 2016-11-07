@@ -1,0 +1,45 @@
+{
+	"account":{
+		"token": "token-here",
+		"account_id": "account-id-here",
+		"is_live": false
+	},
+
+	"instruments":{
+		"EUR_USD":{
+			"granularity": "M1",
+			"candles_num": 103,
+                 "automated_trade" : true,
+                 "bollinger_period":  100,
+                 "risk" : 0.001,
+                 "home_conversion": {
+                                        "instrument": "USD_SGD",
+                                        "invert_convert": false,
+                                        "invert_quote": false
+                
+                                     }
+		},
+		
+		"AUD_JPY": {
+			"granularity": "M2",
+        		"candles_num": 43,
+                "automated_trade" : true,
+                "bollinger_period":  40,
+                "risk" : 0.001,
+                "home_conversion": {
+                                        "instrument": "AUD_SGD",
+                                        "invert_convert": false,
+                                        "invert_quote": true
+                
+                                     }
+                
+		},
+    
+           "AUD_SGD": {
+                "automated_trade" : false
+            },
+            "USD_SGD": {
+                "automated_trade" : false
+            }
+	}	
+}

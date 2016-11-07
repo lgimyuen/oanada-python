@@ -3,3 +3,7 @@ from oandaapi.account import Account
 from oandaapi.instrument import Instrument
 from oandaapi.price import Price
 from oandaapi.candle import Candle
+from oandaapi.trade import Trade
+from oandaapi.transaction import Transaction
+from oandaapi.position import Position
+from oandaapi.order import Order

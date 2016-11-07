@@ -48,7 +48,7 @@ class API:
         
         if self.account_id is not None:
             params["accountId"] = self.account_id
-        r = requests.get(self.api, headers={"Authorization": "Bearer "+self.api_token}, params=params, stream=stream)
+        r = requests.get(self.api, headers={"Authorization": "Bearer "+self.api_token}, params=params, stream=stream, timeout=10)
         
         logger.debug(r.status_code)
         if r.status_code != requests.status_codes.codes.ok:

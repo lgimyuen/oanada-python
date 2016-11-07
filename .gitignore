@@ -4,3 +4,6 @@ dist/
 OandaPython.egg-info
 */__pycache__/
 sample/config.json
+oanda.pyproj
+oanda.sln
+.vs/
