@@ -267,13 +267,12 @@ class BollingerStrategy(Strategy):
             
             
             
-            logger.debug(conv_fac)
-            logger.debug({"name": "Tick in Home currency", "bid": tick["bid"]*conv_fac["bid"], "ask": tick["ask"]*conv_fac["ask"]})        
+            #logger.debug(conv_fac)
+            #logger.debug({"name": "Tick in Home currency", "bid": tick["bid"]*conv_fac["bid"], "ask": tick["ask"]*conv_fac["ask"]})        
             #use only completed candles
             candles = candles[candles.complete]
             (mu, ub, lb) = bollinger_bands(candles, period=config["bollinger_period"])
             
-            #print(self.market_info[tick["instrument"]])
             candle_t1 = Candle(candles, index=-1)
             ub_t1 = ub["closeBid"][-2]
             ub_t0 = ub["closeBid"][-1]
@@ -281,14 +280,33 @@ class BollingerStrategy(Strategy):
             lb_t1 = lb["closeBid"][-2]
             lb_t0 = lb["closeBid"][-1]
         
-            orders = self.order_model.get_opened( instrument=tick["instrument"])
             stop_loss = mu["closeBid"][-1]
+
+            orders = self.order_model.get_opened( instrument=tick["instrument"])
+            
+
+            is_bid_below_MA = tick["bid"] <= stop_loss
+            is_ask_above_MA = tick["ask"] >= stop_loss
+            is_ask_cross_UB = candle_t1.is_under(ub_t1) and tick["ask"] > ub_t0
+            is_ask_cross_LB = candle_t1.is_above(lb_t1) and tick["bid"] < lb_t0
+
+            logger.debug({
+                "instrument": tick["instrument"],
+                "granularity": config["granularity"],
+                "is_bid_below_MA": is_bid_below_MA,
+                "is_ask_above_MA": is_ask_above_MA,
+                "is_ask_cross_above_UB": is_ask_cross_UB,
+                "is_ask_cross_below_LB": is_ask_cross_LB
+                })
+            #TODO: Check should close any order?
+            #TODO: Check should open any market order?
+            
             
             
             if orders is not False and len(orders) > 0:
-                if len(orders[orders["side"] == "buy"] ) > 0 and tick["bid"] <= stop_loss:
+                if len(orders[orders["side"] == "buy"] ) > 0 and is_bid_below_MA:
                     self.order_model.close_by_instrument(tick["instrument"])
-                if len(orders[orders["side"] == "sell"] ) > 0 and tick["ask"] >= stop_loss:
+                if len(orders[orders["side"] == "sell"] ) > 0 and is_ask_above_MA:
                     self.order_model.close_by_instrument(tick["instrument"])
                     
             #check order again, ensure they are all closed before proceed
@@ -302,12 +320,12 @@ class BollingerStrategy(Strategy):
             account_info = self.get_account_info()
             if account_info == False:
                 return
-            logger.debug(account_info)    
+            #logger.debug(account_info)    
             
             
             
                 
-            if candle_t1.is_under(ub_t1) and tick["ask"] > ub_t0:
+            if is_ask_cross_UB:
                 #long at ask price
                 #close at bid price
                 stop_gap = tick["bid"] - stop_loss
@@ -317,7 +335,7 @@ class BollingerStrategy(Strategy):
                 self.order_model.send_market_order(tick["instrument"],units=qty, side="buy", stop_loss=stop_loss)
                 logger.info("go long, stop gap =  {0}, qty = {1}".format(stop_gap, qty))
                 
-            if candle_t1.is_above(lb_t1) and tick["bid"] < lb_t0:
+            if is_ask_cross_LB:
                 #short at bid price
                 #close at ask price
                 stop_gap = stop_loss - tick["ask"] 
