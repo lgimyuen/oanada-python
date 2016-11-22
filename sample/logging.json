@@ -6,7 +6,7 @@
             "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         },
 		"json": {
-			"format": "{ datetime: %(asctime)s,  name: %(name)s,  levelname: %(levelname)s,  msg: %(message)s }"
+			"format": "{ 'datetime': '%(asctime)s',  'name': '%(name)s',  'levelname': '%(levelname)s',  'msg': %(message)s }"
 		}
     },
 
