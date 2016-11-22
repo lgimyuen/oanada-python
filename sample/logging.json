@@ -29,8 +29,8 @@
             "level": "INFO",
             "formatter": "simple",
             "filename": "info.log",
-            "maxBytes": 1024,
-            "backupCount": 0,
+            "maxBytes": 10240,
+            "backupCount": 1,
             "encoding": "utf8"
         },
 
@@ -39,8 +39,8 @@
             "level": "ERROR",
             "formatter": "simple",
             "filename": "errors.log",
-            "maxBytes": 1024,
-            "backupCount": 0,
+            "maxBytes": 10240,
+            "backupCount": 1,
             "encoding": "utf8"
         },
 
@@ -49,8 +49,8 @@
             "level": "DEBUG",
             "formatter": "json",
             "filename": "debug.log",
-            "maxBytes": 1024,
-            "backupCount": 0,
+            "maxBytes": 10240,
+            "backupCount": 1,
             "encoding": "utf8",
             "filters": ["BollingerStrategyOnTickFilter"]
         }
@@ -61,8 +61,8 @@
             "level": "WARN",
             "formatter": "simple",
             "filename": "warn.log",
-            "maxBytes": 1024,
-            "backupCount": 0,
+            "maxBytes": 10240,
+            "backupCount": 1,
             "encoding": "utf8"
         }
     },
