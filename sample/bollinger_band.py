@@ -8,6 +8,8 @@ import oandaapi.granularity
 
 from oandamodel.candle import CandleModel
 from oandamodel.price import PriceModel
+from oandamodel.order import OrderModel
+from oandamodel.tool import bollinger_bands
 
 import os
 import logging.config
@@ -63,7 +65,7 @@ class MarketInfoModel:
         
         return (result, status)
 
-
+"""
 class OrderModel:
     def __init__(self):
         self.trade_api = v1.Trade()
@@ -99,7 +101,7 @@ class OrderModel:
                             trailing_stop=trailing_stop, expiry=expiry)
         
         
-        
+"""        
                 
 
 def bollinger_bands(candles, period):
@@ -288,26 +290,46 @@ class BollingerStrategy(Strategy):
             is_bid_below_MA = tick["bid"] <= stop_loss
             is_ask_above_MA = tick["ask"] >= stop_loss
             is_ask_cross_UB = candle_t1.is_under(ub_t1) and tick["ask"] > ub_t0
-            is_ask_cross_LB = candle_t1.is_above(lb_t1) and tick["bid"] < lb_t0
+            is_bid_cross_LB = candle_t1.is_above(lb_t1) and tick["bid"] < lb_t0
 
-            logger.debug({
-                "instrument": tick["instrument"],
-                "granularity": config["granularity"],
-                "is_bid_below_MA": is_bid_below_MA,
-                "is_ask_above_MA": is_ask_above_MA,
-                "is_ask_cross_above_UB": is_ask_cross_UB,
-                "is_ask_cross_below_LB": is_ask_cross_LB
-                })
+            num_buy_order = 0
+            num_sell_order = 0
+
+            if orders is not False and len(orders) > 0:
+                num_buy_order = len(orders[orders["side"] == "buy"] )
+                num_sell_order = len(orders[orders["side"] == "sell"] ) 
+
+            is_close_buy = num_buy_order > 0 and is_bid_below_MA
+            is_close_sell = num_sell_order > 0 and is_ask_above_MA
+
+            account_info = self.get_account_info()
+            if account_info == False:
+                return
+
+
+            #long at ask price
+            #close at bid price
+            buy_stop_gap = tick["bid"] - stop_loss
+            buy_stop_gap_home = buy_stop_gap*conv_fac["bid"]
+            buy_risk_amt = account_info["marginAvail"]*config["risk"]
+            buy_qty = int(buy_risk_amt / buy_stop_gap_home)
+
+            #short at bid price
+            #close at ask price
+            sell_stop_gap = stop_loss - tick["ask"] 
+            sell_stop_gap_home = sell_stop_gap*conv_fac["ask"]
+            sell_risk_amt = account_info["marginAvail"]*config["risk"]
+            sell_qty = int(sell_risk_amt / sell_stop_gap_home)
+
+
             #TODO: Check should close any order?
             #TODO: Check should open any market order?
             
-            
-            
-            if orders is not False and len(orders) > 0:
-                if len(orders[orders["side"] == "buy"] ) > 0 and is_bid_below_MA:
-                    self.order_model.close_by_instrument(tick["instrument"])
-                if len(orders[orders["side"] == "sell"] ) > 0 and is_ask_above_MA:
-                    self.order_model.close_by_instrument(tick["instrument"])
+                        
+            if is_close_buy:
+                self.order_model.close_by_instrument(tick["instrument"])
+            if is_close_sell:
+                self.order_model.close_by_instrument(tick["instrument"])
                     
             #check order again, ensure they are all closed before proceed
             orders = self.order_model.get_opened( instrument=tick["instrument"])
@@ -317,33 +339,74 @@ class BollingerStrategy(Strategy):
                 return
                    
         
-            account_info = self.get_account_info()
-            if account_info == False:
-                return
+            
             #logger.debug(account_info)    
             
             
             
                 
-            if is_ask_cross_UB:
-                #long at ask price
-                #close at bid price
-                stop_gap = tick["bid"] - stop_loss
-                stop_gap_home = stop_gap*conv_fac["bid"]
-                risk_amt = account_info["marginAvail"]*config["risk"]
-                qty = int(risk_amt / stop_gap_home)
-                self.order_model.send_market_order(tick["instrument"],units=qty, side="buy", stop_loss=stop_loss)
-                logger.info("go long, stop gap =  {0}, qty = {1}".format(stop_gap, qty))
+            if is_ask_cross_UB: #Cross Upper Band -> Long
+                self.order_model.send_market_order(tick["instrument"],units=buy_qty, side="buy", stop_loss=stop_loss)                
+            if is_bid_cross_LB: #Cross Lower Band -> Short
+                self.order_model.send_market_order(tick["instrument"],units=sell_qty, side="sell", stop_loss=stop_loss)
                 
-            if is_ask_cross_LB:
-                #short at bid price
-                #close at ask price
-                stop_gap = stop_loss - tick["ask"] 
-                stop_gap_home = stop_gap*conv_fac["ask"]
-                risk_amt = account_info["marginAvail"]*config["risk"]
-                qty = int(risk_amt / stop_gap_home)
-                self.order_model.send_market_order(tick["instrument"],units=qty, side="sell", stop_loss=stop_loss)
-                logger.info("go short, stop gap =  {0}, qty = {1}".format(stop_gap, qty))
+
+            logger.debug({
+                "tick": tick,
+                "granularity": config["granularity"],
+                "MA": {
+                    "value": stop_loss,
+                    "bid_below": is_bid_below_MA,
+                    "ask_above": is_ask_above_MA
+                },
+
+                "cross": {
+                    "UB": [ub_t0, ub_t0],
+                    "LB": [lb_t0, lb_t1],
+
+                    "ask_above_UB_long": is_ask_cross_UB,
+                    "bid_below_LB_short": is_bid_cross_LB
+
+                },
+
+                "close":
+                {
+                    "buy": is_close_buy,
+                    "sell": is_close_sell
+                },
+
+                "num_orders": {
+                    "buy": num_buy_order,
+                    "sell": num_sell_order
+
+                },
+
+                "candle":{
+                    "o": candle_t1.open,
+                    "c": candle_t1.close,
+                    "h": candle_t1.high,
+                    "l": candle_t1.low
+
+                },
+
+                "buy_stop_loss":{
+                    "buy": buy_stop_gap,
+                    "buy_home": buy_stop_gap_home,
+                    "risk_amt": buy_risk_amt,
+                    "qty": buy_qty
+
+
+                },
+                "sell_stop_loss":{
+                    "sell": sell_stop_gap,
+                    "sell_home": sell_stop_gap_home,
+                    "risk_amt": sell_risk_amt,
+                    "qty": sell_qty
+
+
+                }
+                })
+
         except Exception as e:
             logger.error(e)
             
