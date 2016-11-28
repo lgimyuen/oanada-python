@@ -49,9 +49,52 @@ def plotly_instrument(instrument, config):
         line=go.Line(color='green')
         )
 
+    print(candles.tail(1))
     fig['data'].extend([ma_line, ub_line, lb_line])
     layout = dict(
         title="{0} - {1}".format(instrument, config["granularity"]),
+        shapes=[
+            dict(
+                type='line',
+                x0=candles.index[0],
+                x1=candles.index[-1],
+                y0=candles.closeBid[-1],
+                y1=candles.closeBid[-1],
+                line=dict(color='rgb(255,0,0)')
+                ),
+            dict(
+                type='line',
+                x0=candles.index[0],
+                x1=candles.index[-1],
+                y0=candles.closeAsk[-1],
+                y1=candles.closeAsk[-1],
+                line=dict(color='rgb(0,0,255)')
+                )
+        ],
+        yaxis=dict(fixedrange=False)
+
+    )
+    """
+    layout = dict(
+        title="{0} - {1}".format(instrument, config["granularity"]),
+        shapes=[
+            dict(
+                type='line',
+                x0=candles.index[0],
+                x1=candles.index[-1],
+                y0=candles.closeBid[-1],
+                y1=candles.closeBid[-1],
+                line=dict(color='rgb(255,0,0)')
+                ),
+            dict(
+                type='line',
+                x0=candles.index[0],
+                x1=candles.index[-1],
+                y0=candles.closeAsk[-1],
+                y1=candles.closeAsk[-1],
+                line=dict(color='rgb(0,0,255)')
+                )
+        ],
         xaxis=dict(
             rangeselector=dict(
                 buttons=list([
@@ -76,8 +119,10 @@ def plotly_instrument(instrument, config):
             ),
             rangeslider=dict(),
             type='date'
-        )
-    )
+        ),
+        yaxis=dict(fixedrange=False)
+
+    )"""
     #order_anno = []
     order_model = OrderModel()
     (hist_orders, status) = order_model.get_history(instrument=instrument)
@@ -141,7 +186,7 @@ def plotly_instrument(instrument, config):
             marker = dict(
                 size = 20,
                 color = 'rgba(0, 152, 0, .8)',
-                symbol = "triangle-up-open",
+                symbol = "triangle-up",
                 line = dict(
                     width = 2,
                     color = 'rgb(0, 255, 0)'
@@ -155,7 +200,7 @@ def plotly_instrument(instrument, config):
             mode = 'markers',
             marker = dict(
                 size = 20,
-                symbol = 'triangle-down-open',
+                symbol = 'triangle-down',
                 color = 'rgba(152, 0, 0, .8)',
                 line = dict(
                     width = 2,
