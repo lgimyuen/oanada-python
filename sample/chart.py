@@ -9,7 +9,6 @@ from flask import Flask, render_template
 import plotly
 from plotly.tools import FigureFactory as FF
 import numpy as np
-import pandas.io.data as web
 from datetime import datetime
 import plotly.graph_objs as go
 
