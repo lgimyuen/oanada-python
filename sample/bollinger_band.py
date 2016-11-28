@@ -65,65 +65,7 @@ class MarketInfoModel:
         
         return (result, status)
 
-"""
-class OrderModel:
-    def __init__(self):
-        self.trade_api = v1.Trade()
-        self.position_api = v1.Position()
-        self.order_api = v1.Order()
-    
-    def get_opened(self, instrument=None, side=None):
-        (result, status) = self.trade_api.get_trades(instrument=instrument)
-        
-
-        if status == 200:
-            orders = pd.DataFrame(result["trades"])
-            
-            if len(orders.index)>0:
-                orders.set_index("id", inplace=True)
-                
-                if side is not None:
-                    return orders[orders["side"] == side]
-                else:
-                    return orders
-            else:
-                return orders
-        else:
-            return False
-            
-    def close_by_instrument(self, instrument):
-        return self.position_api.close_position(instrument=instrument)
-        
-    def send_market_order(self, instrument, units, side, take_profit=None, stop_loss=None, expiry=None, trailing_stop=None):
-        return self.order_api.create_order(instrument, 
-                            units=units, side=side, order_type="market", 
-                            take_profit=take_profit, stop_loss=stop_loss,
-                            trailing_stop=trailing_stop, expiry=expiry)
-        
-        
-"""        
-                
-
-def bollinger_bands(candles, period):
-    candles = candles[candles.complete]
-    mu = candles.rolling(period).mean()
-    sigma = candles.rolling(period).std()
-    
-    ub = mu+sigma
-    lb = mu-sigma    
-    
-    return (mu, ub, lb)
   
-        
-#instrument_api = v1.Instrument()
-#(instrument, status) = instrument_api.get_instruments(instruments=["EUR_USD"])
-candle_model = CandleModel()
-price_model = PriceModel()
-#prices = price_model.get_prices(["EUR_USD"])
-
-order_model = OrderModel()
-orders = order_model.get_opened()
-
 
 class Candle:
     def __init__(self, candle, candle_type="Bid", index=0):
@@ -225,10 +167,13 @@ class Strategy:
             return {"conv": "{0} -> {1}".format(tick["instrument"], conv), "bid": quote_bid*conv_bid, "ask": quote_ask*conv_ask}
     
     def run(self):
+
+
         for instrument in self.instruments:
             config = config_data["instruments"][instrument]
             if config["automated_trade"]:
-                self.candles[instrument] = candle_model.get_candles(instrument,
+                self.on_init(instrument, config)
+                self.candles[instrument] = self.candle_model.get_candles(instrument,
                                         granularity=config["granularity"],
                                         count=config["candles_num"])
             
@@ -250,7 +195,7 @@ class Strategy:
     
                 time_delta = tick["time"] - self.candles[instrument].index[-1]            
                 if ( time_delta > oandaapi.granularity.to_timedelta(granularity) ).bool():
-                    self.candles[instrument] = candle_model.get_candles(instrument,
+                    self.candles[instrument] = self.candle_model.get_candles(instrument,
                                         granularity=config["granularity"],
                                         count=config["candles_num"])
                 self.on_tick(tick.to_dict(orient="records")[0], self.candles[instrument], config)
@@ -258,7 +203,10 @@ class Strategy:
  
 class BollingerStrategy(Strategy):
     def on_init(self, instrument, config):
-        return NotImplemented
+        self._prev_is_close_buy = False
+        self._prev_is_close_sell = False
+        self._prev_is_ask_cross_UB = False
+        self._prev_is_bid_cross_LB = False
         
 
     def on_tick(self, tick, candles, config):
@@ -286,6 +234,7 @@ class BollingerStrategy(Strategy):
 
             orders = self.order_model.get_opened( instrument=tick["instrument"])
             
+            is_no_opened_order = orders is False  or len(orders) == 0
 
             is_bid_below_MA = tick["bid"] <= stop_loss
             is_ask_above_MA = tick["ask"] >= stop_loss
@@ -335,77 +284,77 @@ class BollingerStrategy(Strategy):
             orders = self.order_model.get_opened( instrument=tick["instrument"])
             
             #wait for next tick to close
-            if orders is not False  and len(orders) > 0:
-                return
-                   
-        
-            
-            #logger.debug(account_info)    
-            
-            
-            
+            if is_no_opened_order:         
+                if is_ask_cross_UB: #Cross Upper Band -> Long
+                    self.order_model.send_market_order(tick["instrument"],units=buy_qty, side="buy", stop_loss=stop_loss)                
+                if is_bid_cross_LB: #Cross Lower Band -> Short
+                    self.order_model.send_market_order(tick["instrument"],units=sell_qty, side="sell", stop_loss=stop_loss)
+
+
+
                 
-            if is_ask_cross_UB: #Cross Upper Band -> Long
-                self.order_model.send_market_order(tick["instrument"],units=buy_qty, side="buy", stop_loss=stop_loss)                
-            if is_bid_cross_LB: #Cross Lower Band -> Short
-                self.order_model.send_market_order(tick["instrument"],units=sell_qty, side="sell", stop_loss=stop_loss)
-                
+            has_state_changed = is_close_buy != self._prev_is_close_buy or is_close_sell != self._prev_is_close_sell or is_ask_cross_UB != self._prev_is_ask_cross_UB or is_bid_cross_LB != self._prev_is_bid_cross_LB
+            if has_state_changed:
+                logger.debug({
+                    "tick": tick,
+                    "granularity": config["granularity"],
+                    "MA": {
+                        "value": stop_loss,
+                        "bid_below": is_bid_below_MA,
+                        "ask_above": is_ask_above_MA
+                    },
 
-            logger.debug({
-                "tick": tick,
-                "granularity": config["granularity"],
-                "MA": {
-                    "value": stop_loss,
-                    "bid_below": is_bid_below_MA,
-                    "ask_above": is_ask_above_MA
-                },
+                    "cross": {
+                        "UB": [ub_t0, ub_t0],
+                        "LB": [lb_t0, lb_t1],
 
-                "cross": {
-                    "UB": [ub_t0, ub_t0],
-                    "LB": [lb_t0, lb_t1],
+                        "ask_above_UB_long": is_ask_cross_UB,
+                        "bid_below_LB_short": is_bid_cross_LB
 
-                    "ask_above_UB_long": is_ask_cross_UB,
-                    "bid_below_LB_short": is_bid_cross_LB
+                    },
 
-                },
+                    "close":
+                    {
+                        "buy": is_close_buy,
+                        "sell": is_close_sell
+                    },
 
-                "close":
-                {
-                    "buy": is_close_buy,
-                    "sell": is_close_sell
-                },
+                    "num_orders": {
+                        "buy": num_buy_order,
+                        "sell": num_sell_order
 
-                "num_orders": {
-                    "buy": num_buy_order,
-                    "sell": num_sell_order
+                    },
 
-                },
+                    "candle":{
+                        "o": candle_t1.open,
+                        "c": candle_t1.close,
+                        "h": candle_t1.high,
+                        "l": candle_t1.low
 
-                "candle":{
-                    "o": candle_t1.open,
-                    "c": candle_t1.close,
-                    "h": candle_t1.high,
-                    "l": candle_t1.low
+                    },
 
-                },
-
-                "buy_stop_loss":{
-                    "buy": buy_stop_gap,
-                    "buy_home": buy_stop_gap_home,
-                    "risk_amt": buy_risk_amt,
-                    "qty": buy_qty
+                    "buy_stop_loss":{
+                        "buy": buy_stop_gap,
+                        "buy_home": buy_stop_gap_home,
+                        "risk_amt": buy_risk_amt,
+                        "qty": buy_qty
 
 
-                },
-                "sell_stop_loss":{
-                    "sell": sell_stop_gap,
-                    "sell_home": sell_stop_gap_home,
-                    "risk_amt": sell_risk_amt,
-                    "qty": sell_qty
+                    },
+                    "sell_stop_loss":{
+                        "sell": sell_stop_gap,
+                        "sell_home": sell_stop_gap_home,
+                        "risk_amt": sell_risk_amt,
+                        "qty": sell_qty
 
 
-                }
-                })
+                    }
+                    })
+                self._prev_is_close_buy  = is_close_buy
+                self._prev_is_close_sell = is_close_sell
+                self._prev_is_ask_cross_UB = is_ask_cross_UB
+                self._prev_is_bid_cross_LB = is_bid_cross_LB
+
 
         except Exception as e:
             logger.error(e)
@@ -414,59 +363,3 @@ class BollingerStrategy(Strategy):
         
 strategy = BollingerStrategy(config_data)        
 strategy.run()
-
-"""
-data = {}
-for instrument in config_data["instruments"]:    
-    name = instrument["instrument"]
-    data[name] = {}
-    data[name]["period"] = instrument["bollinger_period"]
-    data[name]["granularity"] = instrument["granularity"]
-
-    data[instrument["instrument"]]["candles"] = candle_model.get_candles(instrument["instrument"],
-                                    granularity=instrument["granularity"],
-                                    count=instrument["bollinger_period"]+3)
-       
-    (data[instrument["instrument"]]["mu"],
-     data[instrument["instrument"]]["ub"],
-     data[instrument["instrument"]]["lb"]) = bollinger_bands(
-                            data[instrument["instrument"]]["candles"], 
-                            period=instrument["bollinger_period"])
-
-#since_time = datetime.datetime(2016, 10, 13)
-#since_time.isoformat("T")
-logger = logging.getLogger("bollinger_band.py")
-
-for tick in price_model.get_prices_stream(instruments=list(data.keys())):
-    name = tick["instrument"][0]
-    candles = data[name]["candles"]
-    ub = data[name]["ub"]
-    lb = data[name]["lb"]
-    mu = data[name]["mu"]
-    granularity = data[name]["granularity"]
-    period = data[name]["period"]
-
-    time_delta = tick["time"] - candles.index[-1]
-    logger.debug("{0} time since last candle {1}".format(tick["instrument"][0], time_delta[0]))
-    
-    if ( time_delta > oandaapi.granularity.to_timedelta(granularity) ).bool():
-        logger.debug("{0} fetching candles".format(tick["instrument"][0]))
-        
-        data[name]["candles"] = candle_model.get_candles(name, 
-                    granularity=granularity, 
-                    count=period+3)
-        candles = data[name]["candles"] #is this really needed?
-
-        (data[name]["mu"], 
-         data[name]["ub"], 
-         data[name]["lb"]) = bollinger_bands(candles, period=period)
-        
-        (mu, ub, lb) = (data[name]["mu"], data[name]["ub"], data[name]["lb"])
-        
-    if (tick["bid"] < lb["closeBid"].tail(1)).bool():
-        logger.debug("Short {0}".format(tick["instrument"][0]))
-    elif (tick["ask"] > ub["closeAsk"].tail(1)).bool():
-        logger.debug("Long {0}".format(tick["instrument"][0]))
-    
-
-"""

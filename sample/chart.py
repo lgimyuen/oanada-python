@@ -21,9 +21,8 @@ from oandamodel.tool import bollinger_bands
 
 
 
-def plotly_instrument(instrument):
+def plotly_instrument(instrument, config):
     candle_model = CandleModel()
-    config = config_data["instruments"][instrument]
     candles = candle_model.get_candles(instrument,
                                         granularity=config["granularity"],
                                         count=config["candles_num"]*4)
@@ -79,30 +78,148 @@ def plotly_instrument(instrument):
             type='date'
         )
     )
-    order_anno = []
+    #order_anno = []
     order_model = OrderModel()
     (hist_orders, status) = order_model.get_history(instrument=instrument)
     if status==200 and len(hist_orders)>0:
         hist_orders = hist_orders[hist_orders["type"]!="DAILY_INTEREST"]
         hist_orders = hist_orders[hist_orders["time"] >= candles.index[0]]
+
+    market_order_buy_x = []
+    market_order_buy_y = []
+    market_order_sell_x = []
+    market_order_sell_y = []
+    market_order_buy_text = []
+    market_order_sell_text = []
+
+
+    stop_loss_filled_buy_x = []
+    stop_loss_filled_buy_y = []
+
+    stop_loss_filled_sell_x = []
+    stop_loss_filled_sell_y = []
+
+    trade_close_buy_x = []
+    trade_close_buy_y = []
+
+    trade_close_sell_x = []
+    trade_close_sell_y = []
+
     for index, row in hist_orders.iterrows():
-        fig['data'].extend([
-            go.Scatter(
-                x=[row['time']],
-                y=[row['price']],
-                name='Order',
-                text='id: {0}, Order Type: {1}\nSide: {2}'.format(index, row["type"], row['side']),
-                mode = 'markers',
-                marker = dict(
-                    size = 20,
-                    color = 'rgba(152, 0, 0, .8)',
-                    line = dict(
-                        width = 2,
-                        color = 'rgb(255, 0, 0)'
-                    )
+        if row["type"] == "MARKET_ORDER_CREATE":
+            if row["side"] == "buy":
+                market_order_buy_x.extend([row["time"]])
+                market_order_buy_y.extend([row["price"]])
+                market_order_buy_text.extend([index])
+            else:
+                market_order_sell_x.extend([row["time"]])
+                market_order_sell_y.extend([row["price"]])
+                market_order_sell_text.extend([index])
+
+        if row["type"] == "STOP_LOSS_FILLED":
+            if row["side"] == "buy":
+                stop_loss_filled_buy_x.extend([row["time"]])
+                stop_loss_filled_buy_y.extend([row["price"]])
+            else:
+                stop_loss_filled_sell_x.extend([row["time"]])
+                stop_loss_filled_sell_y.extend([row["price"]])
+        if row["type"] == "TRADE_CLOSE":
+            if row["side"] == "buy":
+                trade_close_buy_x.extend([row["time"]])
+                trade_close_buy_y.extend([row["price"]])
+            else:
+                trade_close_sell_x.extend([row["time"]])
+                trade_close_sell_y.extend([row["price"]])
+
+    fig['data'].extend([
+        go.Scatter(
+            x=market_order_buy_x,
+            y=market_order_buy_y,
+            name='Market Order LONG',
+            text=market_order_buy_text,
+            mode = 'markers',
+            marker = dict(
+                size = 20,
+                color = 'rgba(0, 152, 0, .8)',
+                symbol = "triangle-up-open",
+                line = dict(
+                    width = 2,
+                    color = 'rgb(0, 255, 0)'
                 )
+            )),
+        go.Scatter(
+            x=market_order_sell_x,
+            y=market_order_sell_y,
+            name='Market Order SHORT',
+            text=market_order_sell_text,
+            mode = 'markers',
+            marker = dict(
+                size = 20,
+                symbol = 'triangle-down-open',
+                color = 'rgba(152, 0, 0, .8)',
+                line = dict(
+                    width = 2,
+                    color = 'rgb(255, 0, 0)'
                 )
-            ])
+            )),
+        go.Scatter(
+            x=stop_loss_filled_buy_x,
+            y=stop_loss_filled_buy_y,
+            name='STOP LOSS LONG',
+            #text='id: {0}, Order Type: {1}\nSide: {2}'.format(index, row["type"], row['side']),
+            mode = 'markers',
+            marker = dict(
+                size = 20,
+                color = 'rgba(0, 0, 152, .8)',
+                line = dict(
+                    width = 2,
+                    color = 'rgb(255, 0, 0)'
+                )
+            )),
+        go.Scatter(
+            x=stop_loss_filled_sell_x,
+            y=stop_loss_filled_sell_y,
+            name='STOP LOSS SHORT',
+            #text='id: {0}, Order Type: {1}\nSide: {2}'.format(index, row["type"], row['side']),
+            mode = 'markers',
+            marker = dict(
+                size = 20,
+                color = 'rgba(152, 0, 152, .8)',
+                line = dict(
+                    width = 2,
+                    color = 'rgb(255, 0, 0)'
+                )
+            )),
+        go.Scatter(
+            x=trade_close_buy_x,
+            y=trade_close_buy_y,
+            name='TRADE CLOSE LONG',
+            #text='id: {0}, Order Type: {1}\nSide: {2}'.format(index, row["type"], row['side']),
+            mode = 'markers',
+            marker = dict(
+                size = 20,
+                color = 'rgba(152, 0, 152, .8)',
+                line = dict(
+                    width = 2,
+                    color = 'rgb(255, 0, 0)'
+                )
+            )),
+        go.Scatter(
+            x=trade_close_sell_x,
+            y=trade_close_sell_y,
+            name='TRADE CLOSE SHORT',
+            #text='id: {0}, Order Type: {1}\nSide: {2}'.format(index, row["type"], row['side']),
+            mode = 'markers',
+            marker = dict(
+                size = 20,
+                color = 'rgba(0, 100, 100, .8)',
+                line = dict(
+                    width = 2,
+                    color = 'rgb(255, 0, 0)'
+                )
+            ))
+
+        ])
     """#Use this if want to use Annotations
         order_anno.extend([
             dict(
@@ -123,102 +240,26 @@ def plotly_instrument(instrument):
 
     return fig
 
+def init_sys():
+    with open('config.json') as json_data:
+        config_data = json.load(json_data)
+        print(config_data)
 
-with open('config.json') as json_data:
-    config_data = json.load(json_data)
-    print(config_data)
+        
+    v1.API.init(token=config_data["account"]["token"], 
+               is_live=config_data["account"]["is_live"],
+               account_id=config_data["account"]["account_id"])
 
-    
-v1.API.init(token=config_data["account"]["token"], 
-           is_live=config_data["account"]["is_live"],
-           account_id=config_data["account"]["account_id"])
-
+    return config_data
 
            
 app = Flask(__name__)
 
-@app.route("/plot_candles/<instrument>")
-def plot_candles(instrument):
-    
-    fig = plotly_instrument(instrument)
-
-    graphs = [fig]
-
-
-
-    # Add "ids" to each of the graphs to pass up to the client
-    # for templating
-    ids = ['graph-{}'.format(i) for i, _ in enumerate(graphs)]
-
-    # Convert the figures to JSON
-    # PlotlyJSONEncoder appropriately converts pandas, datetime, etc
-    # objects to their JSON equivalents
-    graphJSON = json.dumps(graphs, cls=plotly.utils.PlotlyJSONEncoder)
-
-
-    return render_template('testplotly.html',
-                           ids=ids,
-                           graphJSON=graphJSON)
-
-
-@app.route('/testplotly')
-def testplotly():
-
-    df = web.DataReader("aapl", 'yahoo', datetime(2014, 10, 1), datetime(2016, 4, 1))
-    fig = FF.create_candlestick(df.Open, df.High, df.Low, df.Close, dates=df.index)
-    layout = dict(
-        title='Time series with range slider and selectors',
-        xaxis=dict(
-            rangeselector=dict(
-                buttons=list([
-                    dict(count=1,
-                         label='1m',
-                         step='month',
-                         stepmode='backward'),
-                    dict(count=6,
-                         label='6m',
-                         step='month',
-                         stepmode='backward'),
-                    dict(count=1,
-                        label='YTD',
-                        step='year',
-                        stepmode='todate'),
-                    dict(count=1,
-                        label='1y',
-                        step='year',
-                        stepmode='backward'),
-                    dict(step='all')
-                ])
-            ),
-            rangeslider=dict(),
-            type='date'
-        )
-    )
-
-    fig['layout'] = layout
-    graphs = [fig]
-
-
-
-    # Add "ids" to each of the graphs to pass up to the client
-    # for templating
-    ids = ['graph-{}'.format(i) for i, _ in enumerate(graphs)]
-
-    # Convert the figures to JSON
-    # PlotlyJSONEncoder appropriately converts pandas, datetime, etc
-    # objects to their JSON equivalents
-    graphJSON = json.dumps(graphs, cls=plotly.utils.PlotlyJSONEncoder)
-
-    return render_template('testplotly.html',
-                           ids=ids,
-                           graphJSON=graphJSON)
-
-@app.route("/test")
-def test():
-    return render_template("test.html")
 
 @app.route("/")
-def hello():
+def root():
+    config_data = init_sys()
+
     price_model = PriceModel()
     instruments = list(config_data["instruments"].keys())
     (prices, status) = price_model.get_prices(instruments)
@@ -227,7 +268,7 @@ def hello():
     for instrument in instruments:
         config = config_data["instruments"][instrument]
         if config["automated_trade"]:
-            fig = plotly_instrument(instrument)
+            fig = plotly_instrument(instrument, config_data["instruments"][instrument])
             graphs.extend([fig])
 
     # Add "ids" to each of the graphs to pass up to the client
@@ -245,6 +286,8 @@ def hello():
     
 @app.route("/get_candles/<instrument>")
 def get_candles(instrument):
+    config_data = init_sys()
+
     candle_model = CandleModel()
     config = config_data["instruments"][instrument]
     candles = candle_model.get_candles(instrument,
@@ -255,6 +298,8 @@ def get_candles(instrument):
     
 @app.route("/get_trading_instruments")
 def get_trading_instruments():
+    config_data = init_sys()
+
     instruments = list(config_data["instruments"].keys())
     arr = []
     for instrument in instruments:
@@ -265,11 +310,13 @@ def get_trading_instruments():
 
 @app.route("/get_prices")
 def get_prices_default():
+    config_data = init_sys()
     return get_prices('index')
     
 @app.route("/get_prices/<orient_type>")
 def get_prices(orient_type):
-    
+    config_data = init_sys()
+
     instruments = list(config_data["instruments"].keys())
     price_model = PriceModel()
     (prices, status) = price_model.get_prices(instruments)
