@@ -101,6 +101,11 @@ class Candle:
 
 class Strategy:
     def __init__(self, config_data):
+        self._prev_is_close_buy = {}
+        self._prev_is_close_sell = {}
+        self._prev_is_ask_cross_UB = {}
+        self._prev_is_bid_cross_LB = {}
+
         self.candle_model = CandleModel()
         self.price_model = PriceModel()
         self.order_model = OrderModel()
@@ -202,17 +207,22 @@ class Strategy:
             
  
 class BollingerStrategy(Strategy):
+    def __init__(self, config_data):
+        Strategy.__init__(self, config_data)
+        
+
     def on_init(self, instrument, config):
-        self._prev_is_close_buy = False
-        self._prev_is_close_sell = False
-        self._prev_is_ask_cross_UB = False
-        self._prev_is_bid_cross_LB = False
+        self._prev_is_close_buy[instrument] = True
+        self._prev_is_close_sell[instrument] = True
+        self._prev_is_ask_cross_UB[instrument] = True
+        self._prev_is_bid_cross_LB[instrument] = True
         
 
     def on_tick(self, tick, candles, config):
         logger = logging.getLogger("BollingerStrategy.on_tick")
         
         try:
+            instrument = tick["instrument"]
             conv_fac = self.get_conv_factor(tick, config)
             
             
@@ -220,8 +230,9 @@ class BollingerStrategy(Strategy):
             #logger.debug(conv_fac)
             #logger.debug({"name": "Tick in Home currency", "bid": tick["bid"]*conv_fac["bid"], "ask": tick["ask"]*conv_fac["ask"]})        
             #use only completed candles
-            candles = candles[candles.complete]
+            
             (mu, ub, lb) = bollinger_bands(candles, period=config["bollinger_period"])
+            candles = candles[candles.complete]
             
             candle_t1 = Candle(candles, index=-1)
             ub_t1 = ub["closeBid"][-2]
@@ -232,7 +243,7 @@ class BollingerStrategy(Strategy):
         
             stop_loss = mu["closeBid"][-1]
 
-            orders = self.order_model.get_opened( instrument=tick["instrument"])
+            orders = self.order_model.get_opened( instrument=instrument)
             
             is_no_opened_order = orders is False  or len(orders) == 0
 
@@ -293,7 +304,7 @@ class BollingerStrategy(Strategy):
 
 
                 
-            has_state_changed = is_close_buy != self._prev_is_close_buy or is_close_sell != self._prev_is_close_sell or is_ask_cross_UB != self._prev_is_ask_cross_UB or is_bid_cross_LB != self._prev_is_bid_cross_LB
+            has_state_changed = is_close_buy != self._prev_is_close_buy[instrument] or is_close_sell != self._prev_is_close_sell[instrument] or is_ask_cross_UB != self._prev_is_ask_cross_UB[instrument] or is_bid_cross_LB != self._prev_is_bid_cross_LB[instrument]
             if has_state_changed:
                 logger.debug({
                     "tick": tick,
@@ -305,7 +316,7 @@ class BollingerStrategy(Strategy):
                     },
 
                     "cross": {
-                        "UB": [ub_t0, ub_t0],
+                        "UB": [ub_t0, ub_t1],
                         "LB": [lb_t0, lb_t1],
 
                         "ask_above_UB_long": is_ask_cross_UB,
@@ -350,10 +361,10 @@ class BollingerStrategy(Strategy):
 
                     }
                     })
-                self._prev_is_close_buy  = is_close_buy
-                self._prev_is_close_sell = is_close_sell
-                self._prev_is_ask_cross_UB = is_ask_cross_UB
-                self._prev_is_bid_cross_LB = is_bid_cross_LB
+            self._prev_is_close_buy[instrument]  = is_close_buy
+            self._prev_is_close_sell[instrument] = is_close_sell
+            self._prev_is_ask_cross_UB[instrument] = is_ask_cross_UB
+            self._prev_is_bid_cross_LB[instrument] = is_bid_cross_LB
 
 
         except Exception as e:

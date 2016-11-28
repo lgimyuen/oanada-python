@@ -31,19 +31,19 @@ def plotly_instrument(instrument, config):
 
     ma_line = go.Scatter(
         x=mu.index,
-        y=mu.highBid,
+        y=mu.closeBid,
         name='Moving Average',
         line=go.Line(color='blue')
         )
     ub_line = go.Scatter(
         x=ub.index,
-        y=ub.highBid,
+        y=ub.closeBid,
         name='Upper Band',
         line=go.Line(color='green')
         )
     lb_line = go.Scatter(
         x=lb.index,
-        y=lb.highBid,
+        y=lb.closeBid,
         name='Lower Band',
         line=go.Line(color='green')
         )
