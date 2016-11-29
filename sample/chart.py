@@ -11,6 +11,7 @@ from plotly.tools import FigureFactory as FF
 import numpy as np
 from datetime import datetime
 import plotly.graph_objs as go
+import math
 
 from oandamodel.candle import CandleModel
 from oandamodel.price import PriceModel
@@ -59,7 +60,7 @@ def plotly_instrument(instrument, config):
                 x1=candles.index[-1],
                 y0=candles.closeBid[-1],
                 y1=candles.closeBid[-1],
-                line=dict(color='rgb(255,0,0)')
+                line=dict(color='rgba(255,0,0,0.5)')
                 ),
             dict(
                 type='line',
@@ -67,7 +68,7 @@ def plotly_instrument(instrument, config):
                 x1=candles.index[-1],
                 y0=candles.closeAsk[-1],
                 y1=candles.closeAsk[-1],
-                line=dict(color='rgb(0,0,255)')
+                line=dict(color='rgba(0,0,255,0.5)')
                 )
         ],
         yaxis=dict(fixedrange=False)
@@ -123,12 +124,6 @@ def plotly_instrument(instrument, config):
 
     )"""
     #order_anno = []
-    order_model = OrderModel()
-    (hist_orders, status) = order_model.get_history(instrument=instrument)
-    if status==200 and len(hist_orders)>0:
-        hist_orders = hist_orders[hist_orders["type"]!="DAILY_INTEREST"]
-        hist_orders = hist_orders[hist_orders["time"] >= candles.index[0]]
-
     market_order_buy_x = []
     market_order_buy_y = []
     market_order_sell_x = []
@@ -149,31 +144,70 @@ def plotly_instrument(instrument, config):
     trade_close_sell_x = []
     trade_close_sell_y = []
 
-    for index, row in hist_orders.iterrows():
-        if row["type"] == "MARKET_ORDER_CREATE":
-            if row["side"] == "buy":
-                market_order_buy_x.extend([row["time"]])
-                market_order_buy_y.extend([row["price"]])
-                market_order_buy_text.extend([index])
-            else:
-                market_order_sell_x.extend([row["time"]])
-                market_order_sell_y.extend([row["price"]])
-                market_order_sell_text.extend([index])
+    order_model = OrderModel()
 
-        if row["type"] == "STOP_LOSS_FILLED":
-            if row["side"] == "buy":
-                stop_loss_filled_buy_x.extend([row["time"]])
-                stop_loss_filled_buy_y.extend([row["price"]])
-            else:
-                stop_loss_filled_sell_x.extend([row["time"]])
-                stop_loss_filled_sell_y.extend([row["price"]])
-        if row["type"] == "TRADE_CLOSE":
-            if row["side"] == "buy":
-                trade_close_buy_x.extend([row["time"]])
-                trade_close_buy_y.extend([row["price"]])
-            else:
-                trade_close_sell_x.extend([row["time"]])
-                trade_close_sell_y.extend([row["price"]])
+    (hist_orders, status) = order_model.get_history(instrument=instrument)
+    if status==200 and len(hist_orders)>0:
+        hist_orders = hist_orders[hist_orders["type"]!="DAILY_INTEREST"]
+        hist_orders = hist_orders[hist_orders["time"] >= candles.index[0]]
+
+        for index, row in hist_orders.iterrows():
+            if row["type"] == "MARKET_ORDER_CREATE":
+                if row["side"] == "buy":
+                    market_order_buy_x.extend([row["time"]])
+                    market_order_buy_y.extend([row["price"]])
+                    market_order_buy_text.extend([index])
+                else:
+                    market_order_sell_x.extend([row["time"]])
+                    market_order_sell_y.extend([row["price"]])
+                    market_order_sell_text.extend([index])
+                #if row["stopLoss"]
+
+            if row["type"] == "STOP_LOSS_FILLED":
+                if row["side"] == "buy":
+                    stop_loss_filled_buy_x.extend([row["time"]])
+                    stop_loss_filled_buy_y.extend([row["price"]])
+                else:
+                    stop_loss_filled_sell_x.extend([row["time"]])
+                    stop_loss_filled_sell_y.extend([row["price"]])
+            if row["type"] == "TRADE_CLOSE":
+                if row["side"] == "buy":
+                    trade_close_buy_x.extend([row["time"]])
+                    trade_close_buy_y.extend([row["price"]])
+                else:
+                    trade_close_sell_x.extend([row["time"]])
+                    trade_close_sell_y.extend([row["price"]])
+
+    open_orders = order_model.get_opened(instrument=instrument)
+
+    if open_orders is not False:
+        for index, row in open_orders.iterrows():
+            fig['data'].extend([go.Scatter(
+                    x=[candles.index[0], candles.index[-1]],
+                    y=[row['price'], row['price']],
+                    name="{0} Order {1}".format(row["side"], index),
+                    text="{0} Order {1}".format(row["side"], index)
+
+
+                )])
+            if ~math.isnan(row['stopLoss']):
+                fig['data'].extend([go.Scatter(
+                    x=[candles.index[0], candles.index[-1]],
+                    y=[row['stopLoss'], row['stopLoss']],
+                    name="Order {0} Stop Loss".format( index),
+                    text="Order {0} Stop Loss".format(index)
+
+
+                )])
+
+
+
+    print(hist_orders)
+    print(open_orders)
+
+    
+
+    
 
     fig['data'].extend([
         go.Scatter(
@@ -185,7 +219,7 @@ def plotly_instrument(instrument, config):
             marker = dict(
                 size = 20,
                 color = 'rgba(0, 152, 0, .8)',
-                symbol = "triangle-up",
+                symbol = "triangle-up-open",
                 line = dict(
                     width = 2,
                     color = 'rgb(0, 255, 0)'
@@ -199,7 +233,7 @@ def plotly_instrument(instrument, config):
             mode = 'markers',
             marker = dict(
                 size = 20,
-                symbol = 'triangle-down',
+                symbol = 'triangle-down-open',
                 color = 'rgba(152, 0, 0, .8)',
                 line = dict(
                     width = 2,
@@ -213,10 +247,11 @@ def plotly_instrument(instrument, config):
             #text='id: {0}, Order Type: {1}\nSide: {2}'.format(index, row["type"], row['side']),
             mode = 'markers',
             marker = dict(
-                size = 20,
+                symbol="cross",
+                size = 10,
                 color = 'rgba(0, 0, 152, .8)',
                 line = dict(
-                    width = 2,
+                    width = 1,
                     color = 'rgb(255, 0, 0)'
                 )
             )),
@@ -227,10 +262,11 @@ def plotly_instrument(instrument, config):
             #text='id: {0}, Order Type: {1}\nSide: {2}'.format(index, row["type"], row['side']),
             mode = 'markers',
             marker = dict(
-                size = 20,
+                symbol="cross",
+                size = 10,
                 color = 'rgba(152, 0, 152, .8)',
                 line = dict(
-                    width = 2,
+                    width = 1,
                     color = 'rgb(255, 0, 0)'
                 )
             )),
@@ -241,10 +277,10 @@ def plotly_instrument(instrument, config):
             #text='id: {0}, Order Type: {1}\nSide: {2}'.format(index, row["type"], row['side']),
             mode = 'markers',
             marker = dict(
-                size = 20,
+                size = 10,
                 color = 'rgba(152, 0, 152, .8)',
                 line = dict(
-                    width = 2,
+                    width = 1,
                     color = 'rgb(255, 0, 0)'
                 )
             )),
@@ -255,10 +291,10 @@ def plotly_instrument(instrument, config):
             #text='id: {0}, Order Type: {1}\nSide: {2}'.format(index, row["type"], row['side']),
             mode = 'markers',
             marker = dict(
-                size = 20,
+                size = 10,
                 color = 'rgba(0, 100, 100, .8)',
                 line = dict(
-                    width = 2,
+                    width = 1,
                     color = 'rgb(255, 0, 0)'
                 )
             ))

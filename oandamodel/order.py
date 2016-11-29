@@ -27,6 +27,7 @@ class OrderModel:
 			
 			if len(orders.index)>0:
 				orders.set_index("id", inplace=True)
+				orders["time"] = pd.to_datetime(orders["time"])
 				
 				if side is not None:
 					return orders[orders["side"] == side]
