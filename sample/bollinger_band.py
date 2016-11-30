@@ -9,29 +9,8 @@ import oandaapi.granularity
 from oandamodel.candle import CandleModel
 from oandamodel.price import PriceModel
 from oandamodel.order import OrderModel
-from oandamodel.tool import bollinger_bands
+from oandamodel.tool import bollinger_bands, setup_logging
 
-import os
-import logging.config
-
-def setup_logging(
-    default_path='logging.json',
-    default_level=logging.INFO,
-    env_key='LOG_CFG'
-):
-    """Setup logging configuration
-
-    """
-    path = default_path
-    value = os.getenv(env_key, None)
-    if value:
-        path = value
-    if os.path.exists(path):
-        with open(path, 'rt') as f:
-            config = json.load(f)
-        logging.config.dictConfig(config)
-    else:
-        logging.basicConfig(level=default_level)
         
 setup_logging()
 
@@ -61,6 +40,8 @@ class MarketInfoModel:
         if status == 200:
             df = pd.DataFrame.from_dict(result["instruments"])
             df.set_index("instrument", inplace=True)
+            df["decimal_place"] = df.precision.str.find("1") - df.precision.str.find(".")
+
             result = df.to_dict('index')
         
         return (result, status)
@@ -241,7 +222,7 @@ class BollingerStrategy(Strategy):
             lb_t1 = lb["closeBid"][-2]
             lb_t0 = lb["closeBid"][-1]
         
-            stop_loss = mu["closeBid"][-1]
+            stop_loss = round( mu["closeBid"][-1], self.market_info[instrument]["decimal_place"] )
 
             orders = self.order_model.get_opened( instrument=instrument)
             
@@ -297,9 +278,11 @@ class BollingerStrategy(Strategy):
             #wait for next tick to close
             if is_no_opened_order:         
                 if is_ask_cross_UB: #Cross Upper Band -> Long
-                    self.order_model.send_market_order(tick["instrument"],units=buy_qty, side="buy", stop_loss=stop_loss)                
+                    (result, status) = self.order_model.send_market_order(tick["instrument"],units=buy_qty, side="buy", stop_loss=stop_loss)                
+                    logger.debug({"result": result, "status":status})
                 if is_bid_cross_LB: #Cross Lower Band -> Short
-                    self.order_model.send_market_order(tick["instrument"],units=sell_qty, side="sell", stop_loss=stop_loss)
+                    (result, status) = self.order_model.send_market_order(tick["instrument"],units=sell_qty, side="sell", stop_loss=stop_loss)
+                    logger.debug({"result": result, "status":status})
 
 
 
@@ -309,12 +292,13 @@ class BollingerStrategy(Strategy):
                 logger.debug({
                     "tick": tick,
                     "granularity": config["granularity"],
+                    "decimal_place": self.market_info[instrument]["decimal_place"],
                     "MA": {
                         "value": stop_loss,
                         "bid_below": is_bid_below_MA,
                         "ask_above": is_ask_above_MA
                     },
-
+                    
                     "cross": {
                         "UB": [ub_t0, ub_t1],
                         "LB": [lb_t0, lb_t1],
