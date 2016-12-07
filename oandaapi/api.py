@@ -100,8 +100,10 @@ class API:
         logger.debug(self.api)
         logger.debug(data)
         
+        """
         if self.account_id is not None:
             params["accountId"] = self.account_id
+        """
         r = requests.patch(self.api, headers={"Authorization": "Bearer "+self.api_token}, params=params, data=data)
         
         logger.debug(r.status_code)

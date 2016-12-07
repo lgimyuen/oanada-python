@@ -59,6 +59,31 @@ class Order(API):
                     str(order_id)
                 ]), data=data)
         return (r.json(), r.status_code)
+
+    def patch_trade(self, order_id,
+                    stop_loss = None,
+                    take_profit=None,
+                    trailing_stop = None
+                   ):
+        data = {}
+        
+            
+        if take_profit is not None:
+            data["takeProfit"] = take_profit
+        
+        if stop_loss is not None:
+            data["stopLoss"] = stop_loss
+            
+        if trailing_stop is not None:
+            data["trailingStop"] = trailing_stop
+            
+        r = self.patch(action="/".join([
+                    "accounts",
+                    self.account_id,
+                    "trades",
+                    str(order_id)
+                ]), data=data)
+        return (r.json(), r.status_code)
     
     def create_order(self, instrument, units, side, order_type, 
                expiry=None, price=None, lower_bound=None,

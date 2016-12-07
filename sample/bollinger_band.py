@@ -242,6 +242,9 @@ class BollingerStrategy(Strategy):
 
             is_close_buy = num_buy_order > 0 and is_bid_below_MA
             is_close_sell = num_sell_order > 0 and is_ask_above_MA
+            
+            
+
 
             account_info = self.get_account_info()
             if account_info == False:
@@ -262,9 +265,13 @@ class BollingerStrategy(Strategy):
             sell_risk_amt = account_info["marginAvail"]*config["risk"]
             sell_qty = int(sell_risk_amt / sell_stop_gap_home)
 
+            need_mod_stop_loss = (num_buy_order > 0 and stop_loss > orders["stopLoss"].iloc[0]) or (num_sell_order > 0 and stop_loss < orders["stopLoss"].iloc[0])
 
-            #TODO: Check should close any order?
-            #TODO: Check should open any market order?
+            if need_mod_stop_loss:
+                print(orders)
+                print("I modifying!")
+                self.order_model.modify_opened_order(orders.index[0], stop_loss=stop_loss)
+
             
                         
             if is_close_buy:
@@ -274,6 +281,10 @@ class BollingerStrategy(Strategy):
                     
             #check order again, ensure they are all closed before proceed
             orders = self.order_model.get_opened( instrument=tick["instrument"])
+
+
+
+
             
             #wait for next tick to close
             if is_no_opened_order:         
