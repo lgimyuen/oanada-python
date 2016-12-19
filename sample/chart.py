@@ -178,7 +178,7 @@ def plotly_instrument(instrument, config):
                     trade_close_sell_x.extend([row["time"]])
                     trade_close_sell_y.extend([row["price"]])
 
-    open_orders = order_model.get_opened(instrument=instrument)
+    (open_orders, status) = order_model.get_opened(instrument=instrument)
 
     if open_orders is not False:
         for index, row in open_orders.iterrows():
