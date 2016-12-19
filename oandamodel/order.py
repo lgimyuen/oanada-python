@@ -21,7 +21,12 @@ class OrderModel:
             return (False, status)
     
     def get_opened(self, instrument=None, side=None):
+        logger = logging.getLogger("OrderModel.get_opened")
+
         (result, status) = self.trade_api.get_trades(instrument=instrument)
+
+        logger.debug({"instrument":instrument, "side":side, "result": result, "status": status})
+
         if status == 200:
             orders = pd.DataFrame(result["trades"])
             
@@ -32,11 +37,11 @@ class OrderModel:
                 if side is not None:
                     return orders[orders["side"] == side]
                 else:
-                    return orders
+                    return (orders, status)
             else:
-                return orders
+                return (orders, status)
         else:
-            return False
+            return (False, status)
             
     def close_by_instrument(self, instrument):
         return self.position_api.close_position(instrument=instrument)

@@ -5,6 +5,7 @@ import pandas as pd
 import logging
 import json
 import oandaapi.granularity
+import traceback
 
 from oandamodel.candle import CandleModel
 from oandamodel.price import PriceModel
@@ -69,7 +70,7 @@ class Candle:
     
     def is_above(self, value, strict=False):
         if strict:
-            return self.low < value
+            return self.low > value
         
         return (self.open > value) and (self.close > value)
         
@@ -197,6 +198,37 @@ class BollingerStrategy(Strategy):
         self._prev_is_close_sell[instrument] = True
         self._prev_is_ask_cross_UB[instrument] = True
         self._prev_is_bid_cross_LB[instrument] = True
+
+    def is_bid_below_MA(self, bid, MA):
+        return bid <= MA
+
+    def is_ask_above_MA(self, ask, MA):
+        return ask >= MA
+
+    def is_ask_cross_above_UB(self, ask, ub_t0, ub_t1, candle_t1):
+        #TODO: should consider include candle on the band
+        return candle_t1.is_under(ub_t1) and ask > ub_t0
+
+
+    def is_bid_cross_below_LB(self, bid, lb_t0, lb_t1, candle_t1):
+        return candle_t1.is_above(lb_t1) and bid < lb_t0
+
+    def calc_buy_sell(self, tick, stop_loss, conv_fac, account_info, risk):
+    	#long at ask price
+            #close at bid price
+        buy_stop_gap = tick["bid"] - stop_loss
+        buy_stop_gap_home = buy_stop_gap*conv_fac["bid"]
+        buy_risk_amt = account_info["marginAvail"]*risk
+        buy_qty = int(buy_risk_amt / buy_stop_gap_home)
+
+        #short at bid price
+        #close at ask price
+        sell_stop_gap = stop_loss - tick["ask"] 
+        sell_stop_gap_home = sell_stop_gap*conv_fac["ask"]
+        sell_risk_amt = account_info["marginAvail"]*risk
+        sell_qty = int(sell_risk_amt / sell_stop_gap_home)
+
+        return (buy_stop_gap, buy_stop_gap_home, buy_risk_amt, buy_qty, sell_stop_gap, sell_stop_gap_home, sell_risk_amt, sell_qty)
         
 
     def on_tick(self, tick, candles, config):
@@ -224,14 +256,14 @@ class BollingerStrategy(Strategy):
         
             stop_loss = round( mu["closeBid"][-1], self.market_info[instrument]["decimal_place"] )
 
-            orders = self.order_model.get_opened( instrument=instrument)
+            (orders, status) = self.order_model.get_opened( instrument=instrument)
             
             is_no_opened_order = orders is False  or len(orders) == 0
 
-            is_bid_below_MA = tick["bid"] <= stop_loss
-            is_ask_above_MA = tick["ask"] >= stop_loss
-            is_ask_cross_UB = candle_t1.is_under(ub_t1) and tick["ask"] > ub_t0
-            is_bid_cross_LB = candle_t1.is_above(lb_t1) and tick["bid"] < lb_t0
+            is_bid_below_MA = self.is_bid_below_MA(bid=tick["bid"], MA=stop_loss)
+            is_ask_above_MA = self.is_ask_above_MA(ask=tick["ask"], MA=stop_loss)
+            is_ask_cross_UB = self.is_ask_cross_above_UB(ask=tick["ask"], ub_t0=ub_t0, ub_t1=ub_t1, candle_t1=candle_t1)
+            is_bid_cross_LB = self.is_bid_cross_below_LB(bid=tick["bid"], lb_t0=lb_t0, lb_t1=lb_t1, candle_t1=candle_t1)
 
             num_buy_order = 0
             num_sell_order = 0
@@ -250,20 +282,9 @@ class BollingerStrategy(Strategy):
             if account_info == False:
                 return
 
+            (buy_stop_gap, buy_stop_gap_home, buy_risk_amt, buy_qty, 
+            	sell_stop_gap, sell_stop_gap_home, sell_risk_amt, sell_qty) = self.calc_buy_sell(tick=tick, stop_loss=stop_loss, conv_fac=conv_fac, account_info=account_info, risk=config["risk"])
 
-            #long at ask price
-            #close at bid price
-            buy_stop_gap = tick["bid"] - stop_loss
-            buy_stop_gap_home = buy_stop_gap*conv_fac["bid"]
-            buy_risk_amt = account_info["marginAvail"]*config["risk"]
-            buy_qty = int(buy_risk_amt / buy_stop_gap_home)
-
-            #short at bid price
-            #close at ask price
-            sell_stop_gap = stop_loss - tick["ask"] 
-            sell_stop_gap_home = sell_stop_gap*conv_fac["ask"]
-            sell_risk_amt = account_info["marginAvail"]*config["risk"]
-            sell_qty = int(sell_risk_amt / sell_stop_gap_home)
 
             need_mod_stop_loss = (num_buy_order > 0 and stop_loss > orders["stopLoss"].iloc[0]) or (num_sell_order > 0 and stop_loss < orders["stopLoss"].iloc[0])
 
@@ -363,7 +384,7 @@ class BollingerStrategy(Strategy):
 
 
         except Exception as e:
-            logger.error(e)
+            logger.exception("exception has occured!")
             
         
         
