@@ -4,6 +4,10 @@ dist/
 OandaPython.egg-info
 */__pycache__/
 sample/config.json
+sample/.ipynb_checkpoints/
+sample/.vs/
 oanda.pyproj
 oanda.sln
 .vs/
+*.log
+*.log.*

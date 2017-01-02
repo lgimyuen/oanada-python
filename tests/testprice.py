@@ -3,10 +3,16 @@
 
 import unittest
 import oandaapi as v1
+import json
 
 class TestPrice(unittest.TestCase):
     def setUp(self):
-        v1.API.init(token="7f53646e2e4c6e99206c3527e7b94037-91ff8c37a8a439b4da5f22be9173b529", is_live=False, account_id="7636859")
+        with open("tests\config.json") as json_data:
+                config_data = json.load(json_data)
+
+        v1.API.init(token=config_data["account"]["token"], 
+                is_live=config_data["account"]["is_live"],
+                account_id=config_data["account"]["account_id"])      
            
     def test_get_prices(self):
        api = v1.Price()
